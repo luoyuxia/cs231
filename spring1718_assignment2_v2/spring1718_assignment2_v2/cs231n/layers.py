@@ -549,6 +549,7 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     padded_data = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), mode='constant')
 
+    """
     dw = np.zeros_like(w)
     for f in range(out_channel):
         for c in range(in_channel):
@@ -556,21 +557,38 @@ def conv_backward_naive(dout, cache):
                 for j in range(filter_w):
                     indx = padded_data[:, c, i: i + out_h * stride: stride, j: j + out_w * stride: stride]
                     dw[f, c, i, j] = np.sum(dout[:, f, :, :] * indx)
+    """
 
     """
-    sum_dout  = np.sum(dout, axis=0)
+    sum_dout = np.sum(dout, axis=0)
     sum_dout = sum_dout[:, np.newaxis, :, :]
     sum_dout = np.concatenate([sum_dout for i in range(in_channel)], axis=1)
     for i in range(out_channel):
-        dwi, cache = conv_forward_naive(x, sum_dout[i:i+1, :, :, :], np.zeros(1), conv_param)
-        print(dwi.shape)
+        one_chanel_dout = sum_dout[i:i + 1, :, :, :]
+        channels_dout = np.concatenate([one_chanel_dout for i in range(in_channel)], axis=0)
+        dwi, cache = conv_forward_naive(x, channels_dout, np.zeros(in_channel), conv_param)
+        dwi = np.sum(dwi, axis=0)
+        dw[i, :, :, :] = dwi
     """
-
+    dx_pad = np.zeros_like(padded_data)
+    dw = np.zeros_like(w)
+    for ni in range(x.shape[0]):
+        for fi in range(w.shape[0]):
+            for xi in range(out_h):
+                for yi in range(out_w):
+                    dw[fi, :, :, :] += dout[ni, fi, xi, yi] * padded_data[ni, :, xi * stride:xi * stride + filter_h,
+                                                              yi * stride:yi * stride + filter_w]
+                    dx_pad[ni, :, xi * stride:xi * stride + filter_h, yi * stride:yi * stride + filter_w] += \
+                        dout[ni, fi, xi, yi] * w[fi, :, :, :]
     db = np.sum(np.transpose(dout, (1, 0, 2, 3)).reshape(out_channel, -1), axis=1)
-    """"
+    dx = dx_pad[:, :, pad:pad + in_h, pad:pad + in_w]
+    """
+    pad = conv_param['pad']
+    padding_dout = np.pad(dout, pad_width=((0, 0), (0, 0), (pad, pad), (pad, pad)), mode='constant')
     w = np.transpose(w, (1, 0, 2, 3))
     w = np.rot90(w, 2, (2, 3))
-    dx, cache = conv_forward_naive(dout, w, np.zeros(in_channel), conv_param)
+    dx, cache = conv_forward_naive(padding_dout, w, np.zeros(in_channel), conv_param)
+    """
     """
     dx = np.zeros_like(x)
     for nprime in range(N):
@@ -588,7 +606,7 @@ def conv_backward_naive(dout, cache):
                             w_masked = np.sum(
                                 w[f, :, :, :] * mask1 * mask2, axis=(1, 2))
                             dx[nprime, :, i, j] += dout[nprime, f, k, l] * w_masked
-
+    """
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
